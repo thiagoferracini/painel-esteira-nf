@@ -1,0 +1,651 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Esteira NF Combustível</title>
+<style>
+  :root {
+    --verde: #1F6B3C;
+    --verde-escuro: #164E2B;
+    --verde-claro: #E8F3EC;
+    --amarelo: #FFF8E5;
+    --amarelo-texto: #8A6100;
+    --vermelho: #FCEBEB;
+    --vermelho-texto: #A32D2D;
+    --azul: #E6F1FB;
+    --azul-texto: #185FA5;
+    --roxo: #EEEDFE;
+    --roxo-texto: #4A3F9C;
+    --cinza-chip: #EFEFEF;
+    --cinza-chip-texto: #555555;
+    --cinza-bg: #F5F6F5;
+    --cinza-borda: #DDDDDD;
+    --texto: #222222;
+    --texto-sec: #5B5B5B;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: var(--cinza-bg);
+    color: var(--texto);
+  }
+  header {
+    background: var(--verde);
+    color: white;
+    padding: 16px 24px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  header h1 {
+    font-size: 18px;
+    margin: 0;
+    font-weight: 600;
+  }
+  header .user-box {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 14px;
+  }
+  header .user-box button {
+    background: rgba(255,255,255,0.15);
+    border: none;
+    color: white;
+    padding: 6px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+  }
+  header .user-box button:hover { background: rgba(255,255,255,0.25); }
+
+  .tabs {
+    display: flex;
+    background: white;
+    border-bottom: 1px solid var(--cinza-borda);
+    padding: 0 24px;
+  }
+  .tab {
+    padding: 14px 20px;
+    cursor: pointer;
+    color: var(--texto-sec);
+    font-size: 14px;
+    font-weight: 500;
+    border-bottom: 3px solid transparent;
+  }
+  .tab.active {
+    color: var(--verde);
+    border-bottom-color: var(--verde);
+  }
+  .tab .badge {
+    background: var(--verde-claro);
+    color: var(--verde-escuro);
+    border-radius: 10px;
+    padding: 1px 8px;
+    font-size: 12px;
+    margin-left: 6px;
+  }
+
+  main { max-width: 960px; margin: 0 auto; padding: 24px; }
+
+  .toolbar {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 16px;
+    align-items: center;
+  }
+  .toolbar input[type=text] {
+    flex: 1;
+    padding: 10px 14px;
+    border: 1px solid var(--cinza-borda);
+    border-radius: 8px;
+    font-size: 14px;
+  }
+  .toolbar button.refresh {
+    background: white;
+    border: 1px solid var(--cinza-borda);
+    border-radius: 8px;
+    padding: 10px 14px;
+    cursor: pointer;
+    font-size: 13px;
+    color: var(--texto-sec);
+  }
+  .toolbar button.refresh:hover { background: var(--cinza-bg); }
+
+  .card {
+    background: white;
+    border: 1px solid var(--cinza-borda);
+    border-radius: 10px;
+    padding: 14px 18px;
+    margin-bottom: 10px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+  }
+  .card .info { flex: 1; min-width: 0; }
+  .card .info .titulo {
+    font-weight: 600;
+    font-size: 15px;
+    margin: 0 0 4px 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .card .info .sub {
+    font-size: 13px;
+    color: var(--texto-sec);
+    margin: 0;
+  }
+  .card .acoes { display: flex; gap: 8px; flex-shrink: 0; }
+
+  .btn {
+    border: none;
+    border-radius: 6px;
+    padding: 8px 14px;
+    font-size: 13px;
+    cursor: pointer;
+    font-weight: 500;
+    white-space: nowrap;
+  }
+  .btn-primary { background: var(--verde); color: white; }
+  .btn-primary:hover { background: var(--verde-escuro); }
+  .btn-secondary { background: var(--verde-claro); color: var(--verde-escuro); }
+  .btn-secondary:hover { background: #D5E9DD; }
+  .btn-success { background: var(--verde-claro); color: var(--verde-escuro); }
+  .btn-danger { background: var(--vermelho); color: var(--vermelho-texto); }
+  .btn-warning { background: var(--amarelo); color: var(--amarelo-texto); }
+  .btn-roxo { background: var(--roxo); color: var(--roxo-texto); }
+  .btn-cinza { background: var(--cinza-chip); color: var(--cinza-chip-texto); }
+  .btn-ghost { background: transparent; color: var(--texto-sec); border: 1px solid var(--cinza-borda); }
+  .btn-download { background: transparent; color: var(--verde); border: 1px solid var(--verde-claro); }
+  .btn-download:hover { background: var(--verde-claro); }
+
+  .empty {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--texto-sec);
+  }
+  .empty .icone { font-size: 40px; margin-bottom: 12px; }
+
+  .badge-formato {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 10px;
+    background: var(--azul);
+    color: var(--azul-texto);
+    margin-left: 6px;
+  }
+
+  #login-screen {
+    max-width: 400px;
+    margin: 80px auto;
+    background: white;
+    border-radius: 12px;
+    padding: 32px;
+    border: 1px solid var(--cinza-borda);
+    text-align: center;
+  }
+  #login-screen h2 { margin-top: 0; font-size: 18px; }
+  #login-screen select {
+    width: 100%;
+    padding: 10px;
+    border-radius: 8px;
+    border: 1px solid var(--cinza-borda);
+    font-size: 14px;
+    margin: 16px 0;
+  }
+  #login-screen button {
+    width: 100%;
+    padding: 12px;
+    background: var(--verde);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    cursor: pointer;
+    font-weight: 600;
+  }
+
+  .overlay {
+    position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.45);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+  }
+  .overlay.show { display: flex; }
+  .modal {
+    background: white;
+    border-radius: 12px;
+    padding: 24px;
+    width: 90%;
+    max-width: 420px;
+  }
+  .modal h3 { margin-top: 0; font-size: 16px; }
+  .modal select, .modal textarea {
+    width: 100%;
+    padding: 10px;
+    border-radius: 8px;
+    border: 1px solid var(--cinza-borda);
+    font-size: 14px;
+    margin: 10px 0;
+  }
+  .modal .modal-acoes {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+    margin-top: 16px;
+  }
+
+  .toast {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--texto);
+    color: white;
+    padding: 12px 20px;
+    border-radius: 8px;
+    font-size: 14px;
+    z-index: 200;
+    opacity: 0;
+    transition: opacity 0.3s;
+    pointer-events: none;
+  }
+  .toast.show { opacity: 1; }
+
+  #app { display: none; }
+</style>
+</head>
+<body>
+
+<div id="login-screen">
+  <h2>Esteira NF Combustível</h2>
+  <p style="color:var(--texto-sec); font-size:14px;">Selecione seu nome para continuar</p>
+  <select id="select-analista"><option value="">Carregando...</option></select>
+  <button onclick="fazerLogin()">Entrar</button>
+</div>
+
+<div id="app">
+  <header>
+    <h1>Esteira NF Combustível</h1>
+    <div class="user-box">
+      <span id="nome-usuario"></span>
+      <button onclick="trocarUsuario()">Trocar usuário</button>
+    </div>
+  </header>
+
+  <div class="tabs">
+    <div class="tab active" id="tab-fila" onclick="mudarAba('fila')">
+      Fila <span class="badge" id="badge-fila">0</span>
+    </div>
+    <div class="tab" id="tab-minhas" onclick="mudarAba('minhas')">
+      Minhas notas <span class="badge" id="badge-minhas">0</span>
+    </div>
+  </div>
+
+  <main>
+    <div id="view-fila">
+      <div class="toolbar">
+        <input type="text" id="busca-fila" placeholder="Buscar por CNPJ ou nome do posto..." oninput="renderFila()">
+        <button class="refresh" onclick="carregarFila()">Atualizar</button>
+      </div>
+      <div id="lista-fila"></div>
+    </div>
+
+    <div id="view-minhas" style="display:none;">
+      <div class="toolbar">
+        <div style="flex:1;"></div>
+        <button class="refresh" onclick="carregarMinhasNotas()">Atualizar</button>
+      </div>
+      <div id="lista-minhas"></div>
+    </div>
+  </main>
+</div>
+
+<div class="overlay" id="overlay-atribuir">
+  <div class="modal">
+    <h3>Atribuir nota</h3>
+    <p id="atribuir-nome-nota" style="font-size:14px; color:var(--texto-sec);"></p>
+    <select id="select-atribuir-analista"></select>
+    <div class="modal-acoes">
+      <button class="btn btn-ghost" onclick="fecharModal('overlay-atribuir')">Cancelar</button>
+      <button class="btn btn-primary" onclick="confirmarAtribuicao()">Confirmar</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="overlay-motivo">
+  <div class="modal">
+    <h3 id="motivo-titulo">Motivo</h3>
+    <p id="motivo-nome-nota" style="font-size:14px; color:var(--texto-sec);"></p>
+    <textarea id="motivo-texto" rows="3" placeholder="Descreva o motivo (opcional)"></textarea>
+    <div class="modal-acoes">
+      <button class="btn btn-ghost" onclick="fecharModal('overlay-motivo')">Cancelar</button>
+      <button class="btn btn-primary" onclick="confirmarMotivo()">Confirmar</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+const SUPABASE_URL = 'https://qzoybfofmhrzblujplgo.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF6b3liZm9mbWhyemJsdWpwbGdvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ4Mjg5MzcsImV4cCI6MjEwMDQwNDkzN30.zi7g6iZbKU_2GUe0pq1reccisvy6F8-Rb6MmU0Gdwok';
+const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+const SHAREPOINT_BASE_URL = 'https://ailogcombr598.sharepoint.com';
+
+let analistaAtual = null;
+let analistasCache = [];
+let notaParaAtribuir = null;
+let notaParaMotivo = null;
+let statusParaMotivo = null;
+let abaAtual = 'fila';
+
+function linkDownload(n) {
+  if (!n.caminho_arquivo) return '';
+  const url = SHAREPOINT_BASE_URL + n.caminho_arquivo;
+  return `<a class="btn btn-download" href="${url}" target="_blank" rel="noopener" title="Abrir/baixar o arquivo original no SharePoint">Baixar arquivo</a>`;
+}
+
+function nomeEscapado(n) {
+  return (n.nome_emitente || n.numero_nf || '').replace(/'/g, "\\'");
+}
+
+function mostrarToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+function limparCnpj(texto) {
+  return (texto || '').replace(/\D/g, '');
+}
+
+function formatarCnpj(cnpj) {
+  if (!cnpj || cnpj.length !== 14) return cnpj || '';
+  return cnpj.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5');
+}
+
+function formatarMoeda(valor) {
+  if (valor === null || valor === undefined) return '';
+  return valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+}
+
+function formatarData(dataStr) {
+  if (!dataStr) return '';
+  const d = new Date(dataStr);
+  return d.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+}
+
+async function carregarAnalistas() {
+  const { data, error } = await supabaseClient
+    .from('analistas')
+    .select('id, nome, display_name')
+    .eq('ativo', true)
+    .order('nome');
+  if (error) { console.error(error); return; }
+  analistasCache = data;
+  const selectLogin = document.getElementById('select-analista');
+  const selectAtribuir = document.getElementById('select-atribuir-analista');
+  const options = '<option value="">Selecione...</option>' +
+    data.map(a => `<option value="${a.id}">${a.nome}</option>`).join('');
+  selectLogin.innerHTML = options;
+  selectAtribuir.innerHTML = options;
+}
+
+function fazerLogin() {
+  const select = document.getElementById('select-analista');
+  const id = select.value;
+  if (!id) { mostrarToast('Selecione seu nome.'); return; }
+  const analista = analistasCache.find(a => a.id === id);
+  analistaAtual = analista;
+  localStorage.setItem('esteiraNfAnalista', JSON.stringify(analista));
+  entrarNoApp();
+}
+
+function trocarUsuario() {
+  localStorage.removeItem('esteiraNfAnalista');
+  location.reload();
+}
+
+function entrarNoApp() {
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('app').style.display = 'block';
+  document.getElementById('nome-usuario').textContent = analistaAtual.nome;
+  carregarFila();
+  carregarMinhasNotas();
+  iniciarRealtime();
+}
+
+function mudarAba(aba) {
+  abaAtual = aba;
+  document.getElementById('tab-fila').classList.toggle('active', aba === 'fila');
+  document.getElementById('tab-minhas').classList.toggle('active', aba === 'minhas');
+  document.getElementById('view-fila').style.display = aba === 'fila' ? 'block' : 'none';
+  document.getElementById('view-minhas').style.display = aba === 'minhas' ? 'block' : 'none';
+}
+
+let filaCache = [];
+
+async function carregarFila() {
+  const { data, error } = await supabaseClient
+    .from('notas')
+    .select('*')
+    .eq('status', '01_nova')
+    .order('data_recebimento', { ascending: true });
+  if (error) { console.error(error); mostrarToast('Erro ao carregar a fila.'); return; }
+  filaCache = data;
+  document.getElementById('badge-fila').textContent = data.length;
+  renderFila();
+}
+
+function renderFila() {
+  const termo = document.getElementById('busca-fila').value.trim();
+  const termoLimpo = limparCnpj(termo);
+  const termoLower = termo.toLowerCase();
+
+  let lista = filaCache;
+  if (termo) {
+    lista = filaCache.filter(n => {
+      const cnpjBate = termoLimpo.length >= 3 && (n.cnpj_emitente || '').includes(termoLimpo);
+      const nomeBate = (n.nome_emitente || '').toLowerCase().includes(termoLower);
+      return cnpjBate || nomeBate;
+    });
+  }
+
+  const container = document.getElementById('lista-fila');
+  if (lista.length === 0) {
+    container.innerHTML = `<div class="empty"><div class="icone">📭</div>Nenhuma nota pendente na fila.</div>`;
+    return;
+  }
+
+  container.innerHTML = lista.map(n => `
+    <div class="card">
+      <div class="info">
+        <p class="titulo">${n.nome_emitente || n.numero_nf || 'Sem identificação'}<span class="badge-formato">${n.formato_anexo || ''}</span></p>
+        <p class="sub">${n.cnpj_emitente ? 'CNPJ: ' + formatarCnpj(n.cnpj_emitente) + ' · ' : ''}${n.valor_nf ? formatarMoeda(n.valor_nf) + ' · ' : ''}Chegou: ${formatarData(n.data_recebimento)}</p>
+      </div>
+      <div class="acoes">
+        ${linkDownload(n)}
+        <button class="btn btn-secondary" onclick="pegarNota('${n.id}')">Pegar</button>
+        <button class="btn btn-ghost" onclick="abrirAtribuir('${n.id}', '${(n.nome_emitente || n.numero_nf || '').replace(/'/g, "\\'")}')">Atribuir</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+async function pegarNota(id) {
+  const { data, error } = await supabaseClient
+    .from('notas')
+    .update({ analista_id: analistaAtual.id, status: '02_em_analise' })
+    .eq('id', id)
+    .eq('status', '01_nova')
+    .select();
+  if (error) { console.error(error); mostrarToast('Erro ao pegar a nota.'); return; }
+  if (!data || data.length === 0) { mostrarToast('Ops, outro analista pegou essa nota primeiro.'); carregarFila(); return; }
+
+  const cnpj = data[0].cnpj_emitente;
+  if (cnpj) {
+    const { data: carteiraExistente } = await supabaseClient
+      .from('carteira_cnpj')
+      .select('id')
+      .eq('cnpj', cnpj)
+      .maybeSingle();
+    if (!carteiraExistente) {
+      await supabaseClient.from('carteira_cnpj').insert({ cnpj, analista_id: analistaAtual.id });
+      mostrarToast('Nota atribuída a você! Posto adicionado à sua carteira.');
+    } else {
+      mostrarToast('Nota atribuída a você!');
+    }
+  } else {
+    mostrarToast('Nota atribuída a você!');
+  }
+  carregarFila();
+  carregarMinhasNotas();
+}
+
+function abrirAtribuir(id, nome) {
+  notaParaAtribuir = id;
+  document.getElementById('atribuir-nome-nota').textContent = `Nota: ${nome}`;
+  document.getElementById('select-atribuir-analista').value = '';
+  document.getElementById('overlay-atribuir').classList.add('show');
+}
+
+function fecharModal(idOverlay) {
+  document.getElementById(idOverlay).classList.remove('show');
+}
+
+async function confirmarAtribuicao() {
+  const analistaId = document.getElementById('select-atribuir-analista').value;
+  if (!analistaId) { mostrarToast('Selecione um analista.'); return; }
+  const analista = analistasCache.find(a => a.id === analistaId);
+
+  const { data, error } = await supabaseClient
+    .from('notas')
+    .update({ analista_id: analistaId, status: '02_em_analise' })
+    .eq('id', notaParaAtribuir)
+    .eq('status', '01_nova')
+    .select();
+  if (error) { console.error(error); mostrarToast('Erro ao atribuir a nota.'); return; }
+  if (!data || data.length === 0) { mostrarToast('Ops, essa nota já foi pega por alguém.'); fecharModal('overlay-atribuir'); carregarFila(); return; }
+
+  const cnpj = data[0].cnpj_emitente;
+  if (cnpj) {
+    const { data: carteiraExistente } = await supabaseClient
+      .from('carteira_cnpj')
+      .select('id')
+      .eq('cnpj', cnpj)
+      .maybeSingle();
+    if (!carteiraExistente) {
+      await supabaseClient.from('carteira_cnpj').insert({ cnpj, analista_id: analistaId });
+    }
+  }
+
+  mostrarToast(`Nota atribuída a ${analista.nome}!`);
+  fecharModal('overlay-atribuir');
+  carregarFila();
+}
+
+async function carregarMinhasNotas() {
+  if (!analistaAtual) return;
+  const { data, error } = await supabaseClient
+    .from('notas')
+    .select('*')
+    .eq('status', '02_em_analise')
+    .eq('analista_id', analistaAtual.id)
+    .order('data_recebimento', { ascending: true });
+  if (error) { console.error(error); mostrarToast('Erro ao carregar suas notas.'); return; }
+  document.getElementById('badge-minhas').textContent = data.length;
+  renderMinhasNotas(data);
+}
+
+function renderMinhasNotas(lista) {
+  const container = document.getElementById('lista-minhas');
+  if (lista.length === 0) {
+    container.innerHTML = `<div class="empty"><div class="icone">✅</div>Você não tem notas em análise no momento.</div>`;
+    return;
+  }
+  container.innerHTML = lista.map(n => `
+    <div class="card">
+      <div class="info">
+        <p class="titulo">${n.nome_emitente || n.numero_nf || 'Sem identificação'}<span class="badge-formato">${n.formato_anexo || ''}</span></p>
+        <p class="sub">${n.cnpj_emitente ? 'CNPJ: ' + formatarCnpj(n.cnpj_emitente) + ' · ' : ''}${n.valor_nf ? formatarMoeda(n.valor_nf) + ' · ' : ''}Chegou: ${formatarData(n.data_recebimento)}</p>
+      </div>
+      <div class="acoes">
+        ${linkDownload(n)}
+        <button class="btn btn-success" onclick="concluirNota('${n.id}', '03_processada', 'Nota concluída como processada!')">Processada</button>
+        <button class="btn btn-danger" onclick="concluirNota('${n.id}', '04_rejeitada', 'Nota marcada como rejeitada.')">Rejeitada</button>
+        <button class="btn btn-warning" onclick="concluirNota('${n.id}', '05_pendencia', 'Nota marcada como pendência.')">Pendência</button>
+        <button class="btn btn-roxo" onclick="abrirMotivo('${n.id}', '06_erro_webrouter', 'Erro no webrouter', '${nomeEscapado(n)}')">Erro webrouter</button>
+        <button class="btn btn-cinza" onclick="abrirMotivo('${n.id}', '07_nao_pertence', 'Não pertence', '${nomeEscapado(n)}')">Não pertence</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+async function concluirNota(id, novoStatus, mensagem) {
+  const { error } = await supabaseClient
+    .from('notas')
+    .update({ status: novoStatus, data_conclusao: new Date().toISOString() })
+    .eq('id', id);
+  if (error) { console.error(error); mostrarToast('Erro ao atualizar a nota.'); return; }
+  mostrarToast(mensagem);
+  carregarMinhasNotas();
+}
+
+function abrirMotivo(id, status, titulo, nomeNota) {
+  notaParaMotivo = id;
+  statusParaMotivo = status;
+  document.getElementById('motivo-titulo').textContent = titulo;
+  document.getElementById('motivo-nome-nota').textContent = `Nota: ${nomeNota}`;
+  document.getElementById('motivo-texto').value = '';
+  document.getElementById('overlay-motivo').classList.add('show');
+}
+
+async function confirmarMotivo() {
+  const texto = document.getElementById('motivo-texto').value.trim();
+  const campoMensagem = statusParaMotivo === '06_erro_webrouter' ? 'webrouter_mensagem_erro' : 'observacoes';
+  const update = { status: statusParaMotivo, data_conclusao: new Date().toISOString() };
+  if (texto) update[campoMensagem] = texto;
+
+  const { error } = await supabaseClient
+    .from('notas')
+    .update(update)
+    .eq('id', notaParaMotivo);
+  if (error) { console.error(error); mostrarToast('Erro ao atualizar a nota.'); return; }
+  mostrarToast('Nota atualizada.');
+  fecharModal('overlay-motivo');
+  carregarMinhasNotas();
+}
+
+function iniciarRealtime() {
+  supabaseClient
+    .channel('notas-mudancas')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'notas' }, () => {
+      carregarFila();
+      carregarMinhasNotas();
+    })
+    .subscribe();
+}
+
+(async function init() {
+  await carregarAnalistas();
+  const salvo = localStorage.getItem('esteiraNfAnalista');
+  if (salvo) {
+    analistaAtual = JSON.parse(salvo);
+    entrarNoApp();
+  }
+})();
+</script>
+</body>
+</html>
