@@ -140,6 +140,9 @@
     margin: 0;
   }
   .card .acoes { display: flex; gap: 8px; flex-shrink: 0; }
+  .card input[type=checkbox] { width: 18px; height: 18px; cursor: pointer; flex-shrink: 0; }
+  .btn-voltar { background: transparent; color: var(--texto-sec); border: 1px solid var(--cinza-borda); }
+  .btn-voltar:hover { background: var(--cinza-bg); }
 
   .btn {
     border: none;
@@ -285,8 +288,11 @@
     <div class="tab active" id="tab-fila" onclick="mudarAba('fila')">
       Fila <span class="badge" id="badge-fila">0</span>
     </div>
-    <div class="tab" id="tab-minhas" onclick="mudarAba('minhas')">
-      Minhas notas <span class="badge" id="badge-minhas">0</span>
+    <div class="tab" id="tab-conciliar" onclick="mudarAba('conciliar')">
+      A conciliar <span class="badge" id="badge-conciliar">0</span>
+    </div>
+    <div class="tab" id="tab-conciliado" onclick="mudarAba('conciliado')">
+      Conciliado <span class="badge" id="badge-conciliado">0</span>
     </div>
   </div>
 
@@ -299,12 +305,24 @@
       <div id="lista-fila"></div>
     </div>
 
-    <div id="view-minhas" style="display:none;">
+    <div id="view-conciliar" style="display:none;">
+      <div class="toolbar">
+        <label style="display:flex; align-items:center; gap:8px; font-size:13px; color:var(--texto-sec);">
+          <input type="checkbox" id="check-todos" onchange="marcarTodos(this.checked)"> Selecionar todas
+        </label>
+        <div style="flex:1;"></div>
+        <button class="btn btn-primary" id="btn-baixar-selecionadas" onclick="baixarSelecionadas()" disabled>Baixar selecionadas (0)</button>
+        <button class="refresh" onclick="carregarAConciliar()">Atualizar</button>
+      </div>
+      <div id="lista-conciliar"></div>
+    </div>
+
+    <div id="view-conciliado" style="display:none;">
       <div class="toolbar">
         <div style="flex:1;"></div>
-        <button class="refresh" onclick="carregarMinhasNotas()">Atualizar</button>
+        <button class="refresh" onclick="carregarConciliado()">Atualizar</button>
       </div>
-      <div id="lista-minhas"></div>
+      <div id="lista-conciliado"></div>
     </div>
   </main>
 </div>
@@ -317,18 +335,6 @@
     <div class="modal-acoes">
       <button class="btn btn-ghost" onclick="fecharModal('overlay-atribuir')">Cancelar</button>
       <button class="btn btn-primary" onclick="confirmarAtribuicao()">Confirmar</button>
-    </div>
-  </div>
-</div>
-
-<div class="overlay" id="overlay-motivo">
-  <div class="modal">
-    <h3 id="motivo-titulo">Motivo</h3>
-    <p id="motivo-nome-nota" style="font-size:14px; color:var(--texto-sec);"></p>
-    <textarea id="motivo-texto" rows="3" placeholder="Descreva o motivo (opcional)"></textarea>
-    <div class="modal-acoes">
-      <button class="btn btn-ghost" onclick="fecharModal('overlay-motivo')">Cancelar</button>
-      <button class="btn btn-primary" onclick="confirmarMotivo()">Confirmar</button>
     </div>
   </div>
 </div>
@@ -346,9 +352,8 @@ const SHAREPOINT_BASE_URL = 'https://ailogcombr598.sharepoint.com';
 let analistaAtual = null;
 let analistasCache = [];
 let notaParaAtribuir = null;
-let notaParaMotivo = null;
-let statusParaMotivo = null;
 let abaAtual = 'fila';
+let selecionadas = new Set();
 
 function linkDownload(n) {
   if (!n.caminho_arquivo) return '';
@@ -423,16 +428,19 @@ function entrarNoApp() {
   document.getElementById('app').style.display = 'block';
   document.getElementById('nome-usuario').textContent = analistaAtual.nome;
   carregarFila();
-  carregarMinhasNotas();
+  carregarAConciliar();
+  carregarConciliado();
   iniciarRealtime();
 }
 
 function mudarAba(aba) {
   abaAtual = aba;
   document.getElementById('tab-fila').classList.toggle('active', aba === 'fila');
-  document.getElementById('tab-minhas').classList.toggle('active', aba === 'minhas');
+  document.getElementById('tab-conciliar').classList.toggle('active', aba === 'conciliar');
+  document.getElementById('tab-conciliado').classList.toggle('active', aba === 'conciliado');
   document.getElementById('view-fila').style.display = aba === 'fila' ? 'block' : 'none';
-  document.getElementById('view-minhas').style.display = aba === 'minhas' ? 'block' : 'none';
+  document.getElementById('view-conciliar').style.display = aba === 'conciliar' ? 'block' : 'none';
+  document.getElementById('view-conciliado').style.display = aba === 'conciliado' ? 'block' : 'none';
 }
 
 let filaCache = [];
@@ -511,7 +519,7 @@ async function pegarNota(id) {
     mostrarToast('Nota atribuída a você!');
   }
   carregarFila();
-  carregarMinhasNotas();
+  carregarAConciliar();
 }
 
 function abrirAtribuir(id, nome) {
@@ -556,7 +564,9 @@ async function confirmarAtribuicao() {
   carregarFila();
 }
 
-async function carregarMinhasNotas() {
+let conciliarCache = [];
+
+async function carregarAConciliar() {
   if (!analistaAtual) return;
   const { data, error } = await supabaseClient
     .from('notas')
@@ -565,67 +575,132 @@ async function carregarMinhasNotas() {
     .eq('analista_id', analistaAtual.id)
     .order('data_recebimento', { ascending: true });
   if (error) { console.error(error); mostrarToast('Erro ao carregar suas notas.'); return; }
-  document.getElementById('badge-minhas').textContent = data.length;
-  renderMinhasNotas(data);
+  conciliarCache = data;
+  document.getElementById('badge-conciliar').textContent = data.length;
+  selecionadas = new Set([...selecionadas].filter(id => data.some(n => n.id === id)));
+  renderAConciliar();
 }
 
-function renderMinhasNotas(lista) {
-  const container = document.getElementById('lista-minhas');
-  if (lista.length === 0) {
-    container.innerHTML = `<div class="empty"><div class="icone">✅</div>Você não tem notas em análise no momento.</div>`;
+function renderAConciliar() {
+  const container = document.getElementById('lista-conciliar');
+  if (conciliarCache.length === 0) {
+    container.innerHTML = `<div class="empty"><div class="icone">✅</div>Você não tem notas a conciliar no momento.</div>`;
+    atualizarBotaoBaixarSelecionadas();
     return;
   }
-  container.innerHTML = lista.map(n => `
+  container.innerHTML = conciliarCache.map(n => `
     <div class="card">
+      <input type="checkbox" data-id="${n.id}" ${selecionadas.has(n.id) ? 'checked' : ''} onchange="alternarSelecao('${n.id}', this.checked)">
       <div class="info">
         <p class="titulo">${n.nome_emitente || n.numero_nf || 'Sem identificação'}<span class="badge-formato">${n.formato_anexo || ''}</span></p>
         <p class="sub">${n.cnpj_emitente ? 'CNPJ: ' + formatarCnpj(n.cnpj_emitente) + ' · ' : ''}${n.valor_nf ? formatarMoeda(n.valor_nf) + ' · ' : ''}Chegou: ${formatarData(n.data_recebimento)}</p>
       </div>
       <div class="acoes">
+        <button class="btn btn-primary" onclick="baixarEConciliar(['${n.id}'])">Baixar e conciliar</button>
+      </div>
+    </div>
+  `).join('');
+  atualizarBotaoBaixarSelecionadas();
+}
+
+function alternarSelecao(id, marcado) {
+  if (marcado) selecionadas.add(id); else selecionadas.delete(id);
+  atualizarBotaoBaixarSelecionadas();
+}
+
+function marcarTodos(marcado) {
+  selecionadas = marcado ? new Set(conciliarCache.map(n => n.id)) : new Set();
+  renderAConciliar();
+}
+
+function atualizarBotaoBaixarSelecionadas() {
+  const btn = document.getElementById('btn-baixar-selecionadas');
+  btn.textContent = `Baixar selecionadas (${selecionadas.size})`;
+  btn.disabled = selecionadas.size === 0;
+}
+
+function baixarSelecionadas() {
+  baixarEConciliar([...selecionadas]);
+}
+
+async function baixarEConciliar(ids) {
+  const notas = conciliarCache.filter(n => ids.includes(n.id));
+  const semArquivo = notas.filter(n => !n.caminho_arquivo);
+
+  notas.forEach((n, i) => {
+    if (!n.caminho_arquivo) return;
+    setTimeout(() => {
+      const a = document.createElement('a');
+      a.href = SHAREPOINT_BASE_URL + n.caminho_arquivo;
+      a.target = '_blank';
+      a.rel = 'noopener';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    }, i * 400);
+  });
+
+  const { error } = await supabaseClient
+    .from('notas')
+    .update({ status: '03_processada', data_conclusao: new Date().toISOString() })
+    .in('id', ids);
+  if (error) { console.error(error); mostrarToast('Erro ao marcar como conciliado.'); return; }
+
+  selecionadas.clear();
+  const msg = semArquivo.length > 0
+    ? `${ids.length} nota(s) marcada(s) como conciliada(s). ${semArquivo.length} sem arquivo para baixar.`
+    : `${ids.length} nota(s) baixada(s) e marcada(s) como conciliada(s)!`;
+  mostrarToast(msg);
+  carregarAConciliar();
+  carregarConciliado();
+}
+
+let conciliadoCache = [];
+
+async function carregarConciliado() {
+  if (!analistaAtual) return;
+  const { data, error } = await supabaseClient
+    .from('notas')
+    .select('*')
+    .eq('status', '03_processada')
+    .eq('analista_id', analistaAtual.id)
+    .order('data_conclusao', { ascending: false })
+    .limit(200);
+  if (error) { console.error(error); mostrarToast('Erro ao carregar notas conciliadas.'); return; }
+  conciliadoCache = data;
+  document.getElementById('badge-conciliado').textContent = data.length;
+  renderConciliado();
+}
+
+function renderConciliado() {
+  const container = document.getElementById('lista-conciliado');
+  if (conciliadoCache.length === 0) {
+    container.innerHTML = `<div class="empty"><div class="icone">📂</div>Nenhuma nota conciliada ainda.</div>`;
+    return;
+  }
+  container.innerHTML = conciliadoCache.map(n => `
+    <div class="card">
+      <div class="info">
+        <p class="titulo">${n.nome_emitente || n.numero_nf || 'Sem identificação'}<span class="badge-formato">${n.formato_anexo || ''}</span></p>
+        <p class="sub">${n.cnpj_emitente ? 'CNPJ: ' + formatarCnpj(n.cnpj_emitente) + ' · ' : ''}Conciliado em: ${formatarData(n.data_conclusao)}</p>
+      </div>
+      <div class="acoes">
         ${linkDownload(n)}
-        <button class="btn btn-success" onclick="concluirNota('${n.id}', '03_processada', 'Nota concluída como processada!')">Processada</button>
-        <button class="btn btn-danger" onclick="concluirNota('${n.id}', '04_rejeitada', 'Nota marcada como rejeitada.')">Rejeitada</button>
-        <button class="btn btn-warning" onclick="concluirNota('${n.id}', '05_pendencia', 'Nota marcada como pendência.')">Pendência</button>
-        <button class="btn btn-roxo" onclick="abrirMotivo('${n.id}', '06_erro_webrouter', 'Erro no webrouter', '${nomeEscapado(n)}')">Erro webrouter</button>
-        <button class="btn btn-cinza" onclick="abrirMotivo('${n.id}', '07_nao_pertence', 'Não pertence', '${nomeEscapado(n)}')">Não pertence</button>
+        <button class="btn btn-voltar" onclick="voltarParaConciliar('${n.id}')">Voltar</button>
       </div>
     </div>
   `).join('');
 }
 
-async function concluirNota(id, novoStatus, mensagem) {
+async function voltarParaConciliar(id) {
   const { error } = await supabaseClient
     .from('notas')
-    .update({ status: novoStatus, data_conclusao: new Date().toISOString() })
+    .update({ status: '02_em_analise', data_conclusao: null })
     .eq('id', id);
-  if (error) { console.error(error); mostrarToast('Erro ao atualizar a nota.'); return; }
-  mostrarToast(mensagem);
-  carregarMinhasNotas();
-}
-
-function abrirMotivo(id, status, titulo, nomeNota) {
-  notaParaMotivo = id;
-  statusParaMotivo = status;
-  document.getElementById('motivo-titulo').textContent = titulo;
-  document.getElementById('motivo-nome-nota').textContent = `Nota: ${nomeNota}`;
-  document.getElementById('motivo-texto').value = '';
-  document.getElementById('overlay-motivo').classList.add('show');
-}
-
-async function confirmarMotivo() {
-  const texto = document.getElementById('motivo-texto').value.trim();
-  const campoMensagem = statusParaMotivo === '06_erro_webrouter' ? 'webrouter_mensagem_erro' : 'observacoes';
-  const update = { status: statusParaMotivo, data_conclusao: new Date().toISOString() };
-  if (texto) update[campoMensagem] = texto;
-
-  const { error } = await supabaseClient
-    .from('notas')
-    .update(update)
-    .eq('id', notaParaMotivo);
-  if (error) { console.error(error); mostrarToast('Erro ao atualizar a nota.'); return; }
-  mostrarToast('Nota atualizada.');
-  fecharModal('overlay-motivo');
-  carregarMinhasNotas();
+  if (error) { console.error(error); mostrarToast('Erro ao voltar a nota.'); return; }
+  mostrarToast('Nota voltou para "A conciliar".');
+  carregarAConciliar();
+  carregarConciliado();
 }
 
 function iniciarRealtime() {
@@ -633,7 +708,8 @@ function iniciarRealtime() {
     .channel('notas-mudancas')
     .on('postgres_changes', { event: '*', schema: 'public', table: 'notas' }, () => {
       carregarFila();
-      carregarMinhasNotas();
+      carregarAConciliar();
+      carregarConciliado();
     })
     .subscribe();
 }
