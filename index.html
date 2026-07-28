@@ -307,6 +307,7 @@
 
     <div id="view-conciliar" style="display:none;">
       <div class="toolbar">
+        <input type="text" id="busca-conciliar" placeholder="Buscar por CNPJ ou nome do posto..." oninput="renderAConciliar()">
         <label style="display:flex; align-items:center; gap:8px; font-size:13px; color:var(--texto-sec);">
           <input type="checkbox" id="check-todos" onchange="marcarTodos(this.checked)"> Selecionar todas
         </label>
@@ -319,6 +320,7 @@
 
     <div id="view-conciliado" style="display:none;">
       <div class="toolbar">
+        <input type="text" id="busca-conciliado" placeholder="Buscar por CNPJ ou nome do posto..." oninput="renderConciliado()">
         <div style="flex:1;"></div>
         <button class="refresh" onclick="carregarConciliado()">Atualizar</button>
       </div>
@@ -374,6 +376,29 @@ function mostrarToast(msg) {
 
 function limparCnpj(texto) {
   return (texto || '').replace(/\D/g, '');
+}
+
+// Filtra uma lista de notas por nome do emitente ou CNPJ, a partir de um termo digitado.
+function filtrarPorBusca(lista, termo) {
+  const termoTrim = (termo || '').trim();
+  if (!termoTrim) return lista;
+  const termoLimpo = limparCnpj(termoTrim);
+  const termoLower = termoTrim.toLowerCase();
+  return lista.filter(n => {
+    const cnpjBate = termoLimpo.length >= 3 && (n.cnpj_emitente || '').includes(termoLimpo);
+    const nomeBate = (n.nome_emitente || '').toLowerCase().includes(termoLower);
+    return cnpjBate || nomeBate;
+  });
+}
+
+// Monta a linha de e-mails (remetente e/ou analista responsável), só exibindo o que existir.
+function linhaEmails(n) {
+  const partes = [];
+  if (n.remetente_email) partes.push(`De: ${n.remetente_email}`);
+  const emailAnalista = n.analistas && n.analistas.email;
+  if (emailAnalista) partes.push(`Analista: ${emailAnalista}`);
+  if (partes.length === 0) return '';
+  return `<p class="sub">${partes.join(' · ')}</p>`;
 }
 
 function formatarCnpj(cnpj) {
@@ -449,7 +474,7 @@ let filaCache = [];
 async function carregarFila() {
   const { data, error } = await supabaseClient
     .from('notas')
-    .select('*')
+    .select('*, analistas(nome, email, display_name)')
     .eq('status', '01_nova')
     .order('data_recebimento', { ascending: true });
   if (error) { console.error(error); mostrarToast('Erro ao carregar a fila.'); return; }
@@ -459,22 +484,14 @@ async function carregarFila() {
 }
 
 function renderFila() {
-  const termo = document.getElementById('busca-fila').value.trim();
-  const termoLimpo = limparCnpj(termo);
-  const termoLower = termo.toLowerCase();
-
-  let lista = filaCache;
-  if (termo) {
-    lista = filaCache.filter(n => {
-      const cnpjBate = termoLimpo.length >= 3 && (n.cnpj_emitente || '').includes(termoLimpo);
-      const nomeBate = (n.nome_emitente || '').toLowerCase().includes(termoLower);
-      return cnpjBate || nomeBate;
-    });
-  }
+  const termo = document.getElementById('busca-fila').value;
+  const lista = filtrarPorBusca(filaCache, termo);
 
   const container = document.getElementById('lista-fila');
   if (lista.length === 0) {
-    container.innerHTML = `<div class="empty"><div class="icone">📭</div>Nenhuma nota pendente na fila.</div>`;
+    container.innerHTML = termo
+      ? `<div class="empty"><div class="icone">🔍</div>Nenhuma nota encontrada para "${termo}".</div>`
+      : `<div class="empty"><div class="icone">📭</div>Nenhuma nota pendente na fila.</div>`;
     return;
   }
 
@@ -483,6 +500,7 @@ function renderFila() {
       <div class="info">
         <p class="titulo">${n.nome_emitente || n.numero_nf || 'Sem identificação'}<span class="badge-formato">${n.formato_anexo || ''}</span></p>
         <p class="sub">${n.cnpj_emitente ? 'CNPJ: ' + formatarCnpj(n.cnpj_emitente) + ' · ' : ''}${n.valor_nf ? formatarMoeda(n.valor_nf) + ' · ' : ''}Chegou: ${formatarData(n.data_recebimento)}</p>
+        ${linhaEmails(n)}
       </div>
       <div class="acoes">
         ${linkDownload(n)}
@@ -571,7 +589,7 @@ async function carregarAConciliar() {
   if (!analistaAtual) return;
   const { data, error } = await supabaseClient
     .from('notas')
-    .select('*')
+    .select('*, analistas(nome, email, display_name)')
     .eq('status', '02_em_analise')
     .eq('analista_id', analistaAtual.id)
     .order('data_recebimento', { ascending: true });
@@ -583,18 +601,24 @@ async function carregarAConciliar() {
 }
 
 function renderAConciliar() {
+  const termo = document.getElementById('busca-conciliar').value;
+  const lista = filtrarPorBusca(conciliarCache, termo);
+
   const container = document.getElementById('lista-conciliar');
-  if (conciliarCache.length === 0) {
-    container.innerHTML = `<div class="empty"><div class="icone">✅</div>Você não tem notas a conciliar no momento.</div>`;
+  if (lista.length === 0) {
+    container.innerHTML = termo
+      ? `<div class="empty"><div class="icone">🔍</div>Nenhuma nota encontrada para "${termo}".</div>`
+      : `<div class="empty"><div class="icone">✅</div>Você não tem notas a conciliar no momento.</div>`;
     atualizarBotaoBaixarSelecionadas();
     return;
   }
-  container.innerHTML = conciliarCache.map(n => `
+  container.innerHTML = lista.map(n => `
     <div class="card">
       <input type="checkbox" data-id="${n.id}" ${selecionadas.has(n.id) ? 'checked' : ''} onchange="alternarSelecao('${n.id}', this.checked)">
       <div class="info">
         <p class="titulo">${n.nome_emitente || n.numero_nf || 'Sem identificação'}<span class="badge-formato">${n.formato_anexo || ''}</span></p>
         <p class="sub">${n.cnpj_emitente ? 'CNPJ: ' + formatarCnpj(n.cnpj_emitente) + ' · ' : ''}${n.valor_nf ? formatarMoeda(n.valor_nf) + ' · ' : ''}Chegou: ${formatarData(n.data_recebimento)}</p>
+        ${linhaEmails(n)}
       </div>
       <div class="acoes">
         <button class="btn btn-primary" onclick="baixarEConciliar(['${n.id}'])">Baixar e conciliar</button>
@@ -610,7 +634,13 @@ function alternarSelecao(id, marcado) {
 }
 
 function marcarTodos(marcado) {
-  selecionadas = marcado ? new Set(conciliarCache.map(n => n.id)) : new Set();
+  const termo = document.getElementById('busca-conciliar').value;
+  const visiveis = filtrarPorBusca(conciliarCache, termo);
+  if (marcado) {
+    visiveis.forEach(n => selecionadas.add(n.id));
+  } else {
+    visiveis.forEach(n => selecionadas.delete(n.id));
+  }
   renderAConciliar();
 }
 
@@ -662,7 +692,7 @@ async function carregarConciliado() {
   if (!analistaAtual) return;
   const { data, error } = await supabaseClient
     .from('notas')
-    .select('*')
+    .select('*, analistas(nome, email, display_name)')
     .eq('status', '03_processada')
     .eq('analista_id', analistaAtual.id)
     .order('data_conclusao', { ascending: false })
@@ -674,16 +704,22 @@ async function carregarConciliado() {
 }
 
 function renderConciliado() {
+  const termo = document.getElementById('busca-conciliado').value;
+  const lista = filtrarPorBusca(conciliadoCache, termo);
+
   const container = document.getElementById('lista-conciliado');
-  if (conciliadoCache.length === 0) {
-    container.innerHTML = `<div class="empty"><div class="icone">📂</div>Nenhuma nota conciliada ainda.</div>`;
+  if (lista.length === 0) {
+    container.innerHTML = termo
+      ? `<div class="empty"><div class="icone">🔍</div>Nenhuma nota encontrada para "${termo}".</div>`
+      : `<div class="empty"><div class="icone">📂</div>Nenhuma nota conciliada ainda.</div>`;
     return;
   }
-  container.innerHTML = conciliadoCache.map(n => `
+  container.innerHTML = lista.map(n => `
     <div class="card">
       <div class="info">
         <p class="titulo">${n.nome_emitente || n.numero_nf || 'Sem identificação'}<span class="badge-formato">${n.formato_anexo || ''}</span></p>
         <p class="sub">${n.cnpj_emitente ? 'CNPJ: ' + formatarCnpj(n.cnpj_emitente) + ' · ' : ''}Conciliado em: ${formatarData(n.data_conclusao)}</p>
+        ${linhaEmails(n)}
       </div>
       <div class="acoes">
         ${linkDownload(n)}
