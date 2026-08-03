@@ -185,8 +185,8 @@
   }
 
   #login-screen {
-    max-width: 400px;
-    margin: 80px auto;
+    max-width: 960px;
+    margin: 40px auto;
     background: white;
     border-radius: 12px;
     padding: 32px;
@@ -194,7 +194,49 @@
     text-align: center;
   }
   #login-screen h2 { margin-top: 0; font-size: 18px; }
-  #login-screen select {
+
+  .visao-geral { text-align: left; margin: 20px 0 28px 0; }
+  .visao-geral-cabecalho {
+    font-size: 13px;
+    color: var(--texto-sec);
+    margin: 0 0 12px 0;
+    text-transform: capitalize;
+  }
+  .visao-geral-titulo { color: var(--texto-sec); font-size: 13px; }
+  .visao-geral-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 12px;
+  }
+  .analista-overview-card {
+    background: var(--cinza-bg);
+    border: 1px solid var(--cinza-borda);
+    border-radius: 10px;
+    padding: 14px 16px;
+    text-align: left;
+  }
+  .analista-overview-card .nome {
+    font-weight: 600;
+    font-size: 14px;
+    margin: 0 0 8px 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .analista-overview-card .stat-linha {
+    display: flex;
+    justify-content: space-between;
+    font-size: 13px;
+    color: var(--texto-sec);
+    margin: 3px 0;
+  }
+  .analista-overview-card .stat-linha strong { color: var(--texto); font-weight: 600; }
+
+  .login-form {
+    max-width: 360px;
+    margin: 0 auto;
+  }
+  .login-form select {
     width: 100%;
     padding: 10px;
     border-radius: 8px;
@@ -202,7 +244,7 @@
     font-size: 14px;
     margin: 16px 0;
   }
-  #login-screen button {
+  .login-form button {
     width: 100%;
     padding: 12px;
     background: var(--verde);
@@ -270,9 +312,16 @@
 
 <div id="login-screen">
   <h2>Esteira NF Combustível</h2>
-  <p style="color:var(--texto-sec); font-size:14px;">Selecione seu nome para continuar</p>
-  <select id="select-analista"><option value="">Carregando...</option></select>
-  <button onclick="fazerLogin()">Entrar</button>
+
+  <div class="visao-geral" id="visao-geral">
+    <p class="visao-geral-titulo">Carregando visão geral do mês...</p>
+  </div>
+
+  <div class="login-form">
+    <p style="color:var(--texto-sec); font-size:14px;">Selecione seu nome para continuar</p>
+    <select id="select-analista"><option value="">Carregando...</option></select>
+    <button onclick="fazerLogin()">Entrar</button>
+  </div>
 </div>
 
 <div id="app">
@@ -357,10 +406,27 @@ let notaParaAtribuir = null;
 let abaAtual = 'fila';
 let selecionadas = new Set();
 
+// Monta a URL de download de um arquivo no SharePoint a partir do caminho salvo no Supabase.
+// Faz duas correções em relação a montar a URL "na unha":
+// 1) Codifica cada segmento do caminho (espaços, acentos, etc.) sem tocar nas barras "/",
+//    porque caminho_arquivo costuma conter nomes de pasta com espaço (ex: "Arthur Ribas").
+// 2) Adiciona ?download=1, que força o navegador a baixar o arquivo em vez de tentar abrir
+//    o visualizador do SharePoint (que não sabe pré-visualizar .xml e dá erro).
+function montarUrlDownload(caminhoArquivo) {
+  if (!caminhoArquivo) return '';
+  const caminhoCodificado = caminhoArquivo
+    .split('/')
+    .map(parte => encodeURIComponent(parte))
+    .join('/');
+  return `${SHAREPOINT_BASE_URL}${caminhoCodificado}?download=1`;
+}
+
 function linkDownload(n) {
   if (!n.caminho_arquivo) return '';
-  const url = SHAREPOINT_BASE_URL + n.caminho_arquivo;
-  return `<a class="btn btn-download" href="${url}" target="_blank" rel="noopener" title="Abrir/baixar o arquivo original no SharePoint">Baixar arquivo</a>`;
+  const url = montarUrlDownload(n.caminho_arquivo);
+  // Sem target="_blank": como agora o link força download (não navegação),
+  // manter target="_blank" só abriria uma aba em branco a cada clique.
+  return `<a class="btn btn-download" href="${url}" rel="noopener" title="Baixar o arquivo original do SharePoint">Baixar arquivo</a>`;
 }
 
 function nomeEscapado(n) {
@@ -415,6 +481,71 @@ function formatarData(dataStr) {
   if (!dataStr) return '';
   const d = new Date(dataStr);
   return d.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+}
+
+// Retorna o início do mês corrente em ISO, usado como filtro de data_recebimento
+// para a visão geral por analista (sempre "mês atual", recalculado a cada carregamento).
+function inicioMesAtualISO() {
+  const agora = new Date();
+  return new Date(agora.getFullYear(), agora.getMonth(), 1, 0, 0, 0).toISOString();
+}
+
+// Agrupa uma lista de notas por analista_id, somando/contando os quatro indicadores dos cards.
+// Cada nota conta como 1 "e-mail" (é a unidade que já temos no schema hoje).
+function agregarNotasPorAnalista(notas) {
+  const mapa = {};
+  notas.forEach(n => {
+    const chave = n.analista_id || 'sem_analista';
+    if (!mapa[chave]) mapa[chave] = { emails: 0, valorTotal: 0, totalXml: 0, totalPdf: 0 };
+    mapa[chave].emails += 1;
+    mapa[chave].valorTotal += Number(n.valor_nf) || 0;
+    if (n.formato_anexo === 'XML') mapa[chave].totalXml += 1;
+    if (n.formato_anexo === 'PDF') mapa[chave].totalPdf += 1;
+  });
+  return mapa;
+}
+
+// Carrega e renderiza os cards de visão geral (um por analista ativo) na tela de login,
+// com os totais do mês corrente: e-mails recebidos, valor total das notas, total de XML e de PDF.
+async function carregarVisaoGeral() {
+  const container = document.getElementById('visao-geral');
+  const { data, error } = await supabaseClient
+    .from('notas')
+    .select('analista_id, valor_nf, formato_anexo')
+    .gte('data_recebimento', inicioMesAtualISO());
+
+  if (error) {
+    console.error(error);
+    container.innerHTML = '<p class="visao-geral-titulo">Não foi possível carregar a visão geral do mês.</p>';
+    return;
+  }
+
+  const agregados = agregarNotasPorAnalista(data);
+  const ativos = analistasCache.filter(a => a.ativo);
+
+  if (ativos.length === 0) {
+    container.innerHTML = '<p class="visao-geral-titulo">Nenhum analista ativo cadastrado.</p>';
+    return;
+  }
+
+  const cards = ativos.map(a => {
+    const stats = agregados[a.id] || { emails: 0, valorTotal: 0, totalXml: 0, totalPdf: 0 };
+    return `
+      <div class="analista-overview-card">
+        <p class="nome">${a.nome}</p>
+        <div class="stat-linha"><span>E-mails recebidos</span><strong>${stats.emails}</strong></div>
+        <div class="stat-linha"><span>Valor total</span><strong>${formatarMoeda(stats.valorTotal)}</strong></div>
+        <div class="stat-linha"><span>XML</span><strong>${stats.totalXml}</strong></div>
+        <div class="stat-linha"><span>PDF</span><strong>${stats.totalPdf}</strong></div>
+      </div>
+    `;
+  }).join('');
+
+  const nomeMes = new Date().toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+  container.innerHTML = `
+    <p class="visao-geral-cabecalho">Visão geral · ${nomeMes}</p>
+    <div class="visao-geral-grid">${cards}</div>
+  `;
 }
 
 async function carregarAnalistas() {
@@ -505,7 +636,7 @@ function renderFila() {
       <div class="acoes">
         ${linkDownload(n)}
         <button class="btn btn-secondary" onclick="pegarNota('${n.id}')">Pegar</button>
-        <button class="btn btn-ghost" onclick="abrirAtribuir('${n.id}', '${(n.nome_emitente || n.numero_nf || '').replace(/'/g, "\\'")}')">Atribuir</button>
+        <button class="btn btn-ghost" onclick="abrirAtribuir('${n.id}', '${nomeEscapado(n)}')">Atribuir</button>
       </div>
     </div>
   `).join('');
@@ -662,8 +793,7 @@ async function baixarEConciliar(ids) {
     if (!n.caminho_arquivo) return;
     setTimeout(() => {
       const a = document.createElement('a');
-      a.href = SHAREPOINT_BASE_URL + n.caminho_arquivo;
-      a.target = '_blank';
+      a.href = montarUrlDownload(n.caminho_arquivo);
       a.rel = 'noopener';
       document.body.appendChild(a);
       a.click();
@@ -757,6 +887,8 @@ function iniciarRealtime() {
   if (salvo) {
     analistaAtual = JSON.parse(salvo);
     entrarNoApp();
+  } else {
+    carregarVisaoGeral();
   }
 })();
 </script>
