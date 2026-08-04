@@ -185,8 +185,8 @@
   }
 
   #login-screen {
-    max-width: 960px;
-    margin: 40px auto;
+    max-width: 400px;
+    margin: 80px auto;
     background: white;
     border-radius: 12px;
     padding: 32px;
@@ -236,13 +236,15 @@
     max-width: 360px;
     margin: 0 auto;
   }
-  .login-form select {
+  .login-form select,
+  .login-form input[type=email] {
     width: 100%;
     padding: 10px;
     border-radius: 8px;
     border: 1px solid var(--cinza-borda);
     font-size: 14px;
     margin: 16px 0;
+    font-family: inherit;
   }
   .login-form button {
     width: 100%;
@@ -313,14 +315,15 @@
 <div id="login-screen">
   <h2>Esteira NF Combustível</h2>
 
-  <div class="visao-geral" id="visao-geral">
-    <p class="visao-geral-titulo">Carregando visão geral do mês...</p>
+  <div class="login-form" id="login-form-envio">
+    <p style="color:var(--texto-sec); font-size:14px;">Digite seu e-mail Ailog para receber um link de acesso.</p>
+    <input type="email" id="input-email-login" placeholder="seu.nome@ailog.com.br">
+    <button id="btn-enviar-link" onclick="enviarLinkMagico()">Enviar link de acesso</button>
   </div>
 
-  <div class="login-form">
-    <p style="color:var(--texto-sec); font-size:14px;">Selecione seu nome para continuar</p>
-    <select id="select-analista"><option value="">Carregando...</option></select>
-    <button onclick="fazerLogin()">Entrar</button>
+  <div class="login-form" id="login-confirmacao" style="display:none;">
+    <p style="font-size:14px;">Enviamos um link de acesso para <strong id="login-confirmacao-email"></strong>. Abra seu e-mail e clique no link para entrar.</p>
+    <button class="btn-ghost" style="width:100%; padding:10px; border-radius:8px; border:1px solid var(--cinza-borda); background:transparent; cursor:pointer;" onclick="voltarParaFormularioLogin()">Usar outro e-mail</button>
   </div>
 </div>
 
@@ -329,7 +332,7 @@
     <h1>Esteira NF Combustível</h1>
     <div class="user-box">
       <span id="nome-usuario"></span>
-      <button onclick="trocarUsuario()">Trocar usuário</button>
+      <button onclick="trocarUsuario()">Sair</button>
     </div>
   </header>
 
@@ -342,6 +345,9 @@
     </div>
     <div class="tab" id="tab-conciliado" onclick="mudarAba('conciliado')">
       Conciliado <span class="badge" id="badge-conciliado">0</span>
+    </div>
+    <div class="tab" id="tab-visao" onclick="mudarAba('visao')">
+      Visão geral
     </div>
   </div>
 
@@ -374,6 +380,12 @@
         <button class="refresh" onclick="carregarConciliado()">Atualizar</button>
       </div>
       <div id="lista-conciliado"></div>
+    </div>
+
+    <div id="view-visao" style="display:none;">
+      <div id="visao-geral-app">
+        <p class="visao-geral-titulo">Carregando...</p>
+      </div>
     </div>
   </main>
 </div>
@@ -505,15 +517,24 @@ function agregarNotasPorAnalista(notas) {
   return mapa;
 }
 
-// Carrega e renderiza os cards de visão geral (um por analista ativo) na tela de login,
-// com os totais do mês corrente: e-mails recebidos, valor total das notas, total de XML e de PDF.
-async function carregarVisaoGeral() {
-  const container = document.getElementById('visao-geral');
-  const { data, error } = await supabaseClient
+// Carrega e renderiza a Visão Geral dentro do app (aba própria, pós-login).
+// Admin vê um card por analista ativo; analista comum vê só o seu próprio card.
+// A consulta já é protegida por RLS no banco, mas filtramos aqui também por
+// clareza e para reduzir dados trafegados quando não é admin.
+async function carregarVisaoGeralApp() {
+  const container = document.getElementById('visao-geral-app');
+  const admin = analistaAtual && analistaAtual.role === 'admin';
+
+  let query = supabaseClient
     .from('notas')
     .select('analista_id, valor_nf, formato_anexo')
     .gte('data_recebimento', inicioMesAtualISO());
 
+  if (!admin) {
+    query = query.eq('analista_id', analistaAtual.id);
+  }
+
+  const { data, error } = await query;
   if (error) {
     console.error(error);
     container.innerHTML = '<p class="visao-geral-titulo">Não foi possível carregar a visão geral do mês.</p>';
@@ -521,69 +542,133 @@ async function carregarVisaoGeral() {
   }
 
   const agregados = agregarNotasPorAnalista(data);
-  const ativos = analistasCache.filter(a => a.ativo);
+  const nomeMes = new Date().toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
 
-  if (ativos.length === 0) {
-    container.innerHTML = '<p class="visao-geral-titulo">Nenhum analista ativo cadastrado.</p>';
-    return;
-  }
-
-  const cards = ativos.map(a => {
-    const stats = agregados[a.id] || { emails: 0, valorTotal: 0, totalXml: 0, totalPdf: 0 };
-    return `
-      <div class="analista-overview-card">
-        <p class="nome">${a.nome}</p>
-        <div class="stat-linha"><span>E-mails recebidos</span><strong>${stats.emails}</strong></div>
-        <div class="stat-linha"><span>Valor total</span><strong>${formatarMoeda(stats.valorTotal)}</strong></div>
-        <div class="stat-linha"><span>XML</span><strong>${stats.totalXml}</strong></div>
-        <div class="stat-linha"><span>PDF</span><strong>${stats.totalPdf}</strong></div>
+  if (admin) {
+    const ativos = analistasCache.filter(a => a.ativo);
+    if (ativos.length === 0) {
+      container.innerHTML = '<p class="visao-geral-titulo">Nenhum analista ativo cadastrado.</p>';
+      return;
+    }
+    const cards = ativos.map(a => {
+      const stats = agregados[a.id] || { emails: 0, valorTotal: 0, totalXml: 0, totalPdf: 0 };
+      return `
+        <div class="analista-overview-card">
+          <p class="nome">${a.nome}</p>
+          <div class="stat-linha"><span>E-mails recebidos</span><strong>${stats.emails}</strong></div>
+          <div class="stat-linha"><span>Valor total</span><strong>${formatarMoeda(stats.valorTotal)}</strong></div>
+          <div class="stat-linha"><span>XML</span><strong>${stats.totalXml}</strong></div>
+          <div class="stat-linha"><span>PDF</span><strong>${stats.totalPdf}</strong></div>
+        </div>
+      `;
+    }).join('');
+    container.innerHTML = `
+      <p class="visao-geral-cabecalho">Visão geral · ${nomeMes} · todos os analistas</p>
+      <div class="visao-geral-grid">${cards}</div>
+    `;
+  } else {
+    const stats = agregados[analistaAtual.id] || { emails: 0, valorTotal: 0, totalXml: 0, totalPdf: 0 };
+    container.innerHTML = `
+      <p class="visao-geral-cabecalho">Seu resumo · ${nomeMes}</p>
+      <div class="visao-geral-grid">
+        <div class="analista-overview-card">
+          <p class="nome">${analistaAtual.nome}</p>
+          <div class="stat-linha"><span>E-mails recebidos</span><strong>${stats.emails}</strong></div>
+          <div class="stat-linha"><span>Valor total</span><strong>${formatarMoeda(stats.valorTotal)}</strong></div>
+          <div class="stat-linha"><span>XML</span><strong>${stats.totalXml}</strong></div>
+          <div class="stat-linha"><span>PDF</span><strong>${stats.totalPdf}</strong></div>
+        </div>
       </div>
     `;
-  }).join('');
-
-  const nomeMes = new Date().toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
-  container.innerHTML = `
-    <p class="visao-geral-cabecalho">Visão geral · ${nomeMes}</p>
-    <div class="visao-geral-grid">${cards}</div>
-  `;
+  }
 }
 
 async function carregarAnalistas() {
   const { data: todos, error } = await supabaseClient
     .from('analistas')
-    .select('id, nome, display_name, ativo')
+    .select('id, nome, display_name, ativo, role, email')
     .order('nome');
   if (error) { console.error(error); return; }
   analistasCache = todos;
   const ativos = todos.filter(a => a.ativo);
 
-  const selectLogin = document.getElementById('select-analista');
   const selectAtribuir = document.getElementById('select-atribuir-analista');
-  selectLogin.innerHTML = '<option value="">Selecione...</option>' +
-    todos.map(a => `<option value="${a.id}">${a.nome}</option>`).join('');
   selectAtribuir.innerHTML = '<option value="">Selecione...</option>' +
     ativos.map(a => `<option value="${a.id}">${a.nome}</option>`).join('');
 }
 
-function fazerLogin() {
-  const select = document.getElementById('select-analista');
-  const id = select.value;
-  if (!id) { mostrarToast('Selecione seu nome.'); return; }
-  const analista = analistasCache.find(a => a.id === id);
-  analistaAtual = analista;
-  localStorage.setItem('esteiraNfAnalista', JSON.stringify(analista));
+// Envia o link mágico de acesso para o e-mail digitado. O redirect aponta de volta
+// para o próprio painel publicado; o supabase-js detecta o token na URL ao retornar
+// e dispara o evento SIGNED_IN automaticamente.
+async function enviarLinkMagico() {
+  const input = document.getElementById('input-email-login');
+  const email = input.value.trim();
+  if (!email) { mostrarToast('Digite seu e-mail.'); return; }
+
+  const btn = document.getElementById('btn-enviar-link');
+  btn.disabled = true;
+  btn.textContent = 'Enviando...';
+
+  const { error } = await supabaseClient.auth.signInWithOtp({
+    email,
+    options: { emailRedirectTo: 'https://thiagoferracini.github.io/painel-esteira-nf/' }
+  });
+
+  btn.disabled = false;
+  btn.textContent = 'Enviar link de acesso';
+
+  if (error) {
+    console.error(error);
+    mostrarToast('Erro ao enviar o link. Confira o e-mail digitado.');
+    return;
+  }
+
+  document.getElementById('login-form-envio').style.display = 'none';
+  document.getElementById('login-confirmacao').style.display = 'block';
+  document.getElementById('login-confirmacao-email').textContent = email;
+}
+
+function voltarParaFormularioLogin() {
+  document.getElementById('login-confirmacao').style.display = 'none';
+  document.getElementById('login-form-envio').style.display = 'block';
+  document.getElementById('input-email-login').value = '';
+}
+
+// Depois que o Supabase confirma a sessão (link mágico clicado), busca o registro
+// correspondente em `analistas` pelo e-mail da sessão. Se não achar (ou estiver
+// inativo), a pessoa está autenticada mas não é um analista válido — desloga.
+async function tentarEntrarComSessao(session) {
+  if (!session || !session.user || !session.user.email) return false;
+  const emailSessao = session.user.email;
+
+  const { data, error } = await supabaseClient
+    .from('analistas')
+    .select('id, nome, display_name, ativo, role, email')
+    .ilike('email', emailSessao)
+    .maybeSingle();
+
+  if (error) { console.error(error); return false; }
+
+  if (!data || !data.ativo) {
+    mostrarToast('Seu e-mail não está cadastrado como analista ativo. Fale com o administrador.');
+    await supabaseClient.auth.signOut();
+    return false;
+  }
+
+  analistaAtual = data;
   entrarNoApp();
+  return true;
 }
 
 function trocarUsuario() {
-  localStorage.removeItem('esteiraNfAnalista');
-  location.reload();
+  supabaseClient.auth.signOut().then(() => location.reload());
 }
 
 function entrarNoApp() {
   document.getElementById('login-screen').style.display = 'none';
   document.getElementById('app').style.display = 'block';
-  document.getElementById('nome-usuario').textContent = analistaAtual.nome;
+  document.getElementById('nome-usuario').textContent =
+    analistaAtual.role === 'admin' ? `${analistaAtual.nome} (Admin)` : analistaAtual.nome;
   carregarFila();
   carregarAConciliar();
   carregarConciliado();
@@ -595,9 +680,12 @@ function mudarAba(aba) {
   document.getElementById('tab-fila').classList.toggle('active', aba === 'fila');
   document.getElementById('tab-conciliar').classList.toggle('active', aba === 'conciliar');
   document.getElementById('tab-conciliado').classList.toggle('active', aba === 'conciliado');
+  document.getElementById('tab-visao').classList.toggle('active', aba === 'visao');
   document.getElementById('view-fila').style.display = aba === 'fila' ? 'block' : 'none';
   document.getElementById('view-conciliar').style.display = aba === 'conciliar' ? 'block' : 'none';
   document.getElementById('view-conciliado').style.display = aba === 'conciliado' ? 'block' : 'none';
+  document.getElementById('view-visao').style.display = aba === 'visao' ? 'block' : 'none';
+  if (aba === 'visao') carregarVisaoGeralApp();
 }
 
 let filaCache = [];
@@ -881,14 +969,19 @@ function iniciarRealtime() {
     .subscribe();
 }
 
+// Escuta mudanças de sessão — dispara quando o link mágico é clicado e a página
+// volta com o token na URL (o supabase-js já detecta e autentica sozinho).
+supabaseClient.auth.onAuthStateChange((event, session) => {
+  if (event === 'SIGNED_IN') {
+    tentarEntrarComSessao(session);
+  }
+});
+
 (async function init() {
   await carregarAnalistas();
-  const salvo = localStorage.getItem('esteiraNfAnalista');
-  if (salvo) {
-    analistaAtual = JSON.parse(salvo);
-    entrarNoApp();
-  } else {
-    carregarVisaoGeral();
+  const { data: { session } } = await supabaseClient.auth.getSession();
+  if (session) {
+    await tentarEntrarComSessao(session);
   }
 })();
 </script>
