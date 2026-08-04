@@ -316,14 +316,10 @@
   <h2>Esteira NF Combustível</h2>
 
   <div class="login-form" id="login-form-envio">
-    <p style="color:var(--texto-sec); font-size:14px;">Digite seu e-mail Ailog para receber um link de acesso.</p>
-    <input type="email" id="input-email-login" placeholder="seu.nome@ailog.com.br">
-    <button id="btn-enviar-link" onclick="enviarLinkMagico()">Enviar link de acesso</button>
-  </div>
-
-  <div class="login-form" id="login-confirmacao" style="display:none;">
-    <p style="font-size:14px;">Enviamos um link de acesso para <strong id="login-confirmacao-email"></strong>. Abra seu e-mail e clique no link para entrar.</p>
-    <button class="btn-ghost" style="width:100%; padding:10px; border-radius:8px; border:1px solid var(--cinza-borda); background:transparent; cursor:pointer;" onclick="voltarParaFormularioLogin()">Usar outro e-mail</button>
+    <p style="color:var(--texto-sec); font-size:14px;">Entre com seu e-mail e senha Ailog.</p>
+    <input type="email" id="input-email-login" placeholder="seu.nome@ailog.com.br" onkeypress="if(event.key==='Enter') fazerLoginSenha()">
+    <input type="password" id="input-senha-login" placeholder="Senha" onkeypress="if(event.key==='Enter') fazerLoginSenha()">
+    <button id="btn-entrar" onclick="fazerLoginSenha()">Entrar</button>
   </div>
 </div>
 
@@ -597,44 +593,33 @@ async function carregarAnalistas() {
     ativos.map(a => `<option value="${a.id}">${a.nome}</option>`).join('');
 }
 
-// Envia o link mágico de acesso para o e-mail digitado. O redirect aponta de volta
-// para o próprio painel publicado; o supabase-js detecta o token na URL ao retornar
-// e dispara o evento SIGNED_IN automaticamente.
-async function enviarLinkMagico() {
-  const input = document.getElementById('input-email-login');
-  const email = input.value.trim();
-  if (!email) { mostrarToast('Digite seu e-mail.'); return; }
+// Autentica com e-mail + senha (contas criadas previamente via Admin API).
+// Diferente do link mágico, a sessão já vem pronta na resposta — sem precisar
+// esperar redirecionamento nem depender de envio de e-mail.
+async function fazerLoginSenha() {
+  const email = document.getElementById('input-email-login').value.trim();
+  const senha = document.getElementById('input-senha-login').value;
+  if (!email || !senha) { mostrarToast('Preencha e-mail e senha.'); return; }
 
-  const btn = document.getElementById('btn-enviar-link');
+  const btn = document.getElementById('btn-entrar');
   btn.disabled = true;
-  btn.textContent = 'Enviando...';
+  btn.textContent = 'Entrando...';
 
-  const { error } = await supabaseClient.auth.signInWithOtp({
-    email,
-    options: { emailRedirectTo: 'https://thiagoferracini.github.io/painel-esteira-nf/' }
-  });
+  const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password: senha });
 
   btn.disabled = false;
-  btn.textContent = 'Enviar link de acesso';
+  btn.textContent = 'Entrar';
 
   if (error) {
     console.error(error);
-    mostrarToast('Erro ao enviar o link. Confira o e-mail digitado.');
+    mostrarToast('E-mail ou senha incorretos.');
     return;
   }
 
-  document.getElementById('login-form-envio').style.display = 'none';
-  document.getElementById('login-confirmacao').style.display = 'block';
-  document.getElementById('login-confirmacao-email').textContent = email;
+  await tentarEntrarComSessao(data.session);
 }
 
-function voltarParaFormularioLogin() {
-  document.getElementById('login-confirmacao').style.display = 'none';
-  document.getElementById('login-form-envio').style.display = 'block';
-  document.getElementById('input-email-login').value = '';
-}
-
-// Depois que o Supabase confirma a sessão (link mágico clicado), busca o registro
+// Depois que o login por senha confirma a sessão, busca o registro
 // correspondente em `analistas` pelo e-mail da sessão. Se não achar (ou estiver
 // inativo), a pessoa está autenticada mas não é um analista válido — desloga.
 async function tentarEntrarComSessao(session) {
@@ -968,14 +953,6 @@ function iniciarRealtime() {
     })
     .subscribe();
 }
-
-// Escuta mudanças de sessão — dispara quando o link mágico é clicado e a página
-// volta com o token na URL (o supabase-js já detecta e autentica sozinho).
-supabaseClient.auth.onAuthStateChange((event, session) => {
-  if (event === 'SIGNED_IN') {
-    tentarEntrarComSessao(session);
-  }
-});
 
 (async function init() {
   await carregarAnalistas();
